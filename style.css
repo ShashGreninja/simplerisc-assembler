@@ -178,7 +178,7 @@ input[type='file']::-webkit-file-upload-button:hover {
     cursor: default;
 }
 
-#inputArea, #outputArea {
+#inputArea, #outputArea,#openFile {
     padding: 15px;
     box-sizing: border-box;
     line-height: 1.5;

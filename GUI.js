@@ -40,5 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clearButton').addEventListener('click', () => {
         inputTextarea.value = '';
         outputTextarea.value = '';
+        document.getElementById('openFile').value = '';
     });
 });
