@@ -29,7 +29,7 @@ function parseLine(line) {
 
     let label = null;
     if (line.includes(':')) {
-        const parts = line.split(':', 1);
+        const parts = line.split(':');
         label = parts[0].trim();
         line = parts[1] ? parts[1].trim() : '';
     }
@@ -59,15 +59,23 @@ function instructionToMachineCode(command, argumentsList) {
 export function assemble(script) {
     const machineCode = [];
     const lines = script.split('\n');
-    for (const line of lines) {
-        const parsed = parseLine(line);
+
+    for (let i = 0; i < lines.length; i++) {
+        const parsed = parseLine(lines[i]);
         if (parsed) {
             const [label, command, argumentsList] = parsed;
             if (command) {
                 machineCode.push(instructionToMachineCode(command, argumentsList));
+            } else if (label && i + 1 < lines.length) {
+                const nextParsed = parseLine(lines[i + 1]);
+                if (nextParsed && nextParsed[1]) {
+                    const [, nextCommand, nextArguments] = nextParsed;
+                    machineCode.push(instructionToMachineCode(nextCommand, nextArguments));
+                }
             }
         }
     }
+
     return machineCode.join('\n');
 }
 
@@ -84,14 +92,32 @@ console.log(parseLine("JUMP:  # Just a label"));
 console.log(parseLine("# This is a comment"));
 // Output: null
 
-const script = `
+const script1 = `
 LOOP: ADD R1, R2  # A comment
 MOV R3, R4
 JUMP:  # Just a label
 # This is a comment
 `;
 
-console.log(assemble(script));
+const script2 = `
+START:  MOV R1, 1     # Load 1 into R1  
+        CMP R1, R2    # Compare R1 and R2  
+        JEQ EQUAL     # Jump if equal  
+        JMP END       # Unconditional jump  
+EQUAL:  MOV R0, 1     # Set R0 to 1 if equal  
+END:    RET           # End of program
+`;
+
+console.log(assemble(script1));
 // Expected Output: 
 // 000000000100010
 // 00110001100100
+
+console.log(assemble(script2));
+// Expected Output:
+// 001100000100001
+// 010100000100010
+// 0110000NaN
+// 0101100NaN
+// 001100000000001
+// 10110
