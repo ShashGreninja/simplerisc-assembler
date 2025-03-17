@@ -46,11 +46,11 @@ function instructionToMachineCode(command, argumentsList) {
 
     let binaryArgs = '';
     for (let arg of argumentsList) {
-        arg = arg.replace(/,$/, '');
+        arg = String(arg).replace(/,$/, ''); // Ensure arg is a string and remove trailing commas
         if (arg.startsWith('R')) {
-            binaryArgs += parseInt(arg.slice(1)).toString(2).padStart(5, '0');
+            binaryArgs += parseInt(arg.slice(1)).toString(2).padStart(5, '0'); // Convert register (e.g., R1) to binary
         } else {
-            binaryArgs += parseInt(arg).toString(2).padStart(5, '0');
+            binaryArgs += parseInt(arg).toString(2).padStart(5, '0'); // Convert immediate values or label addresses to binary
         }
     }
     return opcode + binaryArgs;
@@ -58,20 +58,44 @@ function instructionToMachineCode(command, argumentsList) {
 
 export function assemble(script) {
     const machineCode = [];
+    const symbolTable = {}; // Symbol table to store label addresses
     const lines = script.split('\n');
+    let currentAddress = 0;
 
+    // First Pass: Build the symbol table
+    for (let i = 0; i < lines.length; i++) {
+        const parsed = parseLine(lines[i]);
+        if (parsed) {
+            const [label, command] = parsed;
+            if (label) { 
+                symbolTable[label] = currentAddress; // Store the label and its address
+            }
+            if (command) {
+                currentAddress++; // Increment address only for valid instructions
+            }
+        }
+    }
+
+    console.log(symbolTable);
+
+    // Second Pass: Generate machine code
     for (let i = 0; i < lines.length; i++) {
         const parsed = parseLine(lines[i]);
         if (parsed) {
             const [label, command, argumentsList] = parsed;
             if (command) {
-                machineCode.push(instructionToMachineCode(command, argumentsList));
-            } else if (label && i + 1 < lines.length) {
-                const nextParsed = parseLine(lines[i + 1]);
-                if (nextParsed && nextParsed[1]) {
-                    const [, nextCommand, nextArguments] = nextParsed;
-                    machineCode.push(instructionToMachineCode(nextCommand, nextArguments));
-                }
+                // Replace label references with addresses
+                const resolvedArguments = argumentsList.map(arg => {
+                    arg = String(arg).replace(/,$/, ''); // Remove trailing commas
+                    if (symbolTable.hasOwnProperty(arg)) {
+                        return symbolTable[arg]; // Replace label with its address
+                    } else if (arg.startsWith('R') || !isNaN(arg)) {
+                        return arg; // Keep registers or immediate values as is
+                    } else {
+                        throw new Error(`Undefined label: ${arg}`);
+                    }
+                });
+                machineCode.push(instructionToMachineCode(command, resolvedArguments));
             }
         }
     }
@@ -99,6 +123,8 @@ JUMP:  # Just a label
 # This is a comment
 `;
 
+
+
 const script2 = `
 START:  MOV R1, 1     # Load 1 into R1  
         CMP R1, R2    # Compare R1 and R2  
@@ -110,14 +136,14 @@ END:    RET           # End of program
 
 console.log(assemble(script1));
 // Expected Output: 
-// 000000000100010
-// 00110001100100
+// 0000000000100010
+// 001100011000100
 
 console.log(assemble(script2));
 // Expected Output:
 // 001100000100001
 // 010100000100010
-// 0110000NaN
-// 0101100NaN
+// 011000000000100
+// 010110000000101
 // 001100000000001
-// 10110
+// 101100000000000
