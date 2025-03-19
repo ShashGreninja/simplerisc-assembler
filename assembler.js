@@ -1,25 +1,25 @@
 const INSTRUCTION_SET = {
-    'ADD': '00000','add': '00000',
-    'SUB': '00001','sub': '00001',
-    'MUL': '00010','mul': '00010',
-    'DIV': '00011','div': '00011',
-    'MOD': '00100','mod': '00100',
-    'CMP': '00101','cmp': '00101',
-    'AND': '00110','and': '00110',
-    'OR': '00111','or': '00111',
-    'NOT': '01000','not': '01000',
-    'MOV': '01001','mov': '01001',
-    'LSL': '01010','lsl': '01010',
-    'LSR': '01011','lsr': '01011',
-    'ASR': '01100','asr': '01100',
-    'NOP': '01101','nop': '01101',
-    'LD': '01110','ld': '01110',
-    'ST': '01111','st': '01111',
-    'BEQ': '10100','beq': '10100',
-    'BGT': '10101','bgt': '10101',
-    'B': '10110','b': '10110',
-    'CALL': '10111','call': '10111',
-    'RET': '11000','ret': '11000'
+    'ADD': '00000', // RR-type
+    'SUB': '00001', // RR-type
+    'MUL': '00010', // RR-type
+    'DIV': '00011', // RR-type
+    'MOD': '00100', // RR-type
+    'CMP': '00101',  // RR-type
+    'AND': '00110', // RR-type
+    'OR': '00111', // RR-type
+    'NOT': '01000',  // RR-type
+    'MOV': '01001',  // RR-type
+    'LSL': '01010', // RR-type
+    'LSR': '01011', // RR-type
+    'ASR': '01100', // RR-type
+    'NOP': '01101', // Special
+    'LD': '01110', // RI-type
+    'ST': '01111' , // RI-type
+    'BEQ': '10000', // B-type
+    'BGT': '10001', // B-type
+    'B': '10010', // B-type
+    'CALL': '10011', // B-type
+    'RET': '10100', // Special
 };
 
 function parseLine(line) {
@@ -40,35 +40,82 @@ function parseLine(line) {
     return [label, parts[0], parts.slice(1)];
 }
 
-function instructionToMachineCode(command, argumentsList) {
+function instructionToMachineCode(command, argumentsList, currentAddress, symbolTable) {
     const opcode = INSTRUCTION_SET[command];
     if (!opcode) throw new Error(`Unknown command: ${command}`);
 
-    let binaryArgs = '';
-    for (let arg of argumentsList) {
-        arg = String(arg).replace(/,$/, ''); // Ensure arg is a string and remove trailing commas
-        if (arg.startsWith('R')) {
-            binaryArgs += parseInt(arg.slice(1)).toString(2).padStart(5, '0'); // Convert register (e.g., R1) to binary
-        }  
-         else {
-            binaryArgs += parseInt(arg).toString(2).padStart(5, '0'); // Convert immediate values or label addresses to binary
+    let binaryInstruction = opcode; // Start with the opcode
+
+    if (['ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'LSL', 'LSR', 'ASR'].includes(command)) {
+        // Register Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits) + rs2 (5 bits) + Unused (11 bits)
+        const [rd, rs1, rs2] = argumentsList;
+        if(rs2.startsWith('R')){
+            binaryInstruction += '0' + parseRegister(rd) + parseRegister(rs1) + parseRegister(rs2) + '0'.repeat(11);
         }
+        else{
+            binaryInstruction += '1' + parseRegister(rd) + parseRegister(rs1) + parseImmediate(rs2, 16);
+        }
+
+    } else if (['CMP', 'AND', 'OR', 'NOT', 'MOV', 'LD', 'ST'].includes(command)) {
+        // Immediate Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits) + imm (16 bits)
+        const [rd, rs1OrImm] = argumentsList;
+        if (rs1OrImm.startsWith('R')) {
+            // If the second argument is a register
+            binaryInstruction += '0' + parseRegister(rd) + parseRegister(rs1OrImm) + '0'.repeat(16);
+        } else {
+            // If the second argument is an immediate value
+            binaryInstruction += '1' + parseRegister(rd) + '0'.repeat(5) + parseImmediate(rs1OrImm, 16);
+        }
+    } else if (['BEQ', 'BGT', 'B', 'CALL'].includes(command)) {
+        // Branch Instructions: Opcode (6 bits) + Offset (26 bits)
+        const [label] = argumentsList;
+        const offset = calculateOffset(label, currentAddress, symbolTable);
+        binaryInstruction += parseImmediate(offset, 27);
+    } else if (command === 'NOP' || command === 'RET') {
+        // Special: 
+        binaryInstruction += '0'.repeat(27);
+    } else {
+        throw new Error(`Unsupported command: ${command}`);
     }
-    return opcode + binaryArgs;
+
+    return binaryInstruction;
+}
+
+function parseRegister(register) {
+    if (!register.startsWith('R')) throw new Error(`Invalid register: ${register}`);
+    const regNum = parseInt(register.slice(1));
+    if (isNaN(regNum) || regNum < 0 || regNum > 31) throw new Error(`Invalid register number: ${register}`);
+    return regNum.toString(2).padStart(5, '0'); // Convert to 5-bit binary
+}
+
+function parseImmediate(value, bitWidth) {
+    let num = parseInt(value);
+    if (isNaN(num)) throw new Error(`Invalid immediate value: ${value}`);
+    if (num < 0) {
+        // Handle negative numbers using two's complement
+        num = (1 << bitWidth) + num;
+    }
+    return num.toString(2).padStart(bitWidth, '0'); // Convert to binary with padding
+}
+
+function calculateOffset(label, currentAddress, symbolTable) {
+    if (!symbolTable.hasOwnProperty(label)) throw new Error(`Undefined label: ${label}`);
+    const labelAddress = symbolTable[label];
+    return labelAddress - (currentAddress + 1); // Offset = label_address - (current_address + 1)
 }
 
 export function assemble(script) {
     const machineCode = [];
     const symbolTable = {}; // Symbol table to store label addresses
     const lines = script.split('\n');
-    let currentAddress = '0000000000';
+    let currentAddress = 0;
 
     // First Pass: Build the symbol table
     for (let i = 0; i < lines.length; i++) {
         const parsed = parseLine(lines[i]);
         if (parsed) {
             const [label, command] = parsed;
-            if (label) { 
+            if (label) {
                 symbolTable[label] = currentAddress; // Store the label and its address
             }
             if (command) {
@@ -76,69 +123,31 @@ export function assemble(script) {
             }
         }
     }
+
     // Second Pass: Generate machine code
+    currentAddress = 0;
     for (let i = 0; i < lines.length; i++) {
         const parsed = parseLine(lines[i]);
         if (parsed) {
-            const [label, command, argumentsList] = parsed;
+            const [, command, argumentsList] = parsed;
             if (command) {
-                // Replace label references with addresses
-                const resolvedArguments = argumentsList.map(arg => {
-                    arg = String(arg).replace(/,$/, ''); // Remove trailing commas
-                    if (symbolTable.hasOwnProperty(arg)) {
-                        return symbolTable[arg]; // Replace label with its address
-                    } else if (arg.startsWith('R') || !isNaN(arg)) {
-                        return arg; // Keep registers or immediate values as is
-                    } else {
-                        throw new Error(`Undefined label: ${arg}`);
-                    }
-                });
-                machineCode.push(instructionToMachineCode(command, resolvedArguments));
+                const binaryInstruction = instructionToMachineCode(command, argumentsList, currentAddress, symbolTable);
+                machineCode.push(binaryInstruction);
+                currentAddress++;
             }
         }
     }
+
     return machineCode.join('\n');
 }
 
-// Examples for testing
-//console.log(parseLine("LOOP: ADD R1, R2  # A comment"));
-// Output: ['LOOP', 'ADD', ['R1,', 'R2']]
+// Example Script for SimpleRISC
+const script = `
+START:  MOV R1, 5        # Load 5 into R1
+        MOV R2, 7        # Load 7 into R2
+        ADD R3, R1, R2   # R3 = R1 + R2 (5 + 7 = 12)
+        NOP              # End of program
 
-//console.log(parseLine("MOV R3, R4"));
-// Output: [null, 'MOV', ['R3,', 'R4']]
-
-//console.log(parseLine("JUMP:  # Just a label"));
-// Output: ['JUMP', null, null]
-
-//console.log(parseLine("# This is a comment"));
-// Output: null
-
-const script1 = `
-LOOP: add R1, R2  # A comment
-mov R3, R4
-JUMP:  # Just a label
-# This is a comment
 `;
 
-const script2 = `
-START:  MOV R1, 1     # Load 1 into R1  
-        CMP R1, R2    # Compare R1 and R2  
-        BEQ EQUAL     # Jump if equal  
-        B  END       # Unconditional jump  
-EQUAL:  MOV R0, 1     # Set R0 to 1 if equal  
-END:    RET           # End of program
-`;
-
-console.log(assemble(script1));
-// Expected Output: 
-// 0000000000100010
-// 001100011000100
-
-// console.log(assemble(script2));
-// Expected Output:
-// 001100000100001
-// 010100000100010
-// 011000000000100
-// 010110000000101
-// 001100000000001
-// 101100000000000
+console.log(assemble(script));
