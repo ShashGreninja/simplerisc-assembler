@@ -57,7 +57,7 @@ function instructionToMachineCode(command, argumentsList, currentAddress, symbol
         }
 
     } else if (['CMP', 'AND', 'OR', 'NOT', 'MOV', 'LD', 'ST'].includes(command)) {
-        // Immediate Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits) + imm (16 bits)
+        // Immediate Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits)/ + imm (16 bits)
         const [rd, rs1OrImm] = argumentsList;
         if (rs1OrImm.startsWith('R')) {
             // If the second argument is a register

@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 # Import your assembler function here
-from assembler import assemble_code  # Update with actual function and file name
+from assembler8085 import assemble_code  # Update with actual function and file name
 
 def convert_to_machine_code():
     input_text = input_textbox.get("1.0", tk.END).strip()
