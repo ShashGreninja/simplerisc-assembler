@@ -20,6 +20,27 @@ const INSTRUCTION_SET = {
     'B': '10010', // B-type
     'CALL': '10011', // B-type
     'RET': '10100', // Special
+    'add': '00000', // RR-type
+    'sub': '00001', // RR-type
+    'mul': '00010', // RR-type
+    'div': '00011', // RR-type
+    'mod': '00100', // RR-type
+    'cmp': '00101',  // RR-type
+    'and': '00110', // RR-type
+    'or': '00111', // RR-type
+    'not': '01000',  // RR-type
+    'mov': '01001',  // RR-type
+    'lsl': '01010', // RR-type
+    'lsr': '01011', // RR-type
+    'asr': '01100', // RR-type
+    'nop': '01101', // Special
+    'ld': '01110', // RI-type
+    'st': '01111' , // RI-type
+    'beq': '10000', // B-type
+    'bgt': '10001', // B-type
+    'b': '10010', // B-type
+    'call': '10011', // B-type
+    'ret': '10100', // Special
 };
 
 function parseLine(line) {
@@ -46,32 +67,32 @@ function instructionToMachineCode(command, argumentsList, currentAddress, symbol
 
     let binaryInstruction = opcode; // Start with the opcode
 
-    if (['ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'LSL', 'LSR', 'ASR'].includes(command)) {
+    if (['ADD', 'SUB', 'MUL', 'DIV', 'MOD', 'LSL', 'LSR', 'ASR','add', 'sub', 'mul', 'div', 'mod', 'lsl', 'lsr', 'asr'].includes(command)) {
         // Register Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits) + rs2 (5 bits) + Unused (11 bits)
         const [rd, rs1, rs2] = argumentsList;
-        if(rs2.startsWith('R')){
+        if(rs2.startsWith('R')||rs2.startsWith('r')){
             binaryInstruction += '0' + parseRegister(rd) + parseRegister(rs1) + parseRegister(rs2) + '0'.repeat(11);
         }
         else{
             binaryInstruction += '1' + parseRegister(rd) + parseRegister(rs1) + parseImmediate(rs2, 16);
         }
 
-    } else if (['CMP', 'AND', 'OR', 'NOT', 'MOV', 'LD', 'ST'].includes(command)) {
-        // Immediate Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits) + imm (16 bits)
+    } else if (['CMP', 'AND', 'OR', 'NOT', 'MOV', 'LD', 'ST','cmp', 'and', 'or', 'not', 'mov', 'ld', 'st'].includes(command)) {
+        // Immediate Instructions: Opcode (5 bits) + I (1 bit) + rd (5 bits) + rs1 (5 bits)/ + imm (16 bits)
         const [rd, rs1OrImm] = argumentsList;
-        if (rs1OrImm.startsWith('R')) {
+        if (rs1OrImm.startsWith('R')||rs1OrImm.startsWith('r')) {
             // If the second argument is a register
             binaryInstruction += '0' + parseRegister(rd) + parseRegister(rs1OrImm) + '0'.repeat(16);
         } else {
             // If the second argument is an immediate value
             binaryInstruction += '1' + parseRegister(rd) + '0'.repeat(5) + parseImmediate(rs1OrImm, 16);
         }
-    } else if (['BEQ', 'BGT', 'B', 'CALL'].includes(command)) {
+    } else if (['BEQ', 'BGT', 'B', 'CALL','beq', 'bgt', 'b', 'call'].includes(command)) {
         // Branch Instructions: Opcode (6 bits) + Offset (26 bits)
         const [label] = argumentsList;
         const offset = calculateOffset(label, currentAddress, symbolTable);
         binaryInstruction += parseImmediate(offset, 27);
-    } else if (command === 'NOP' || command === 'RET') {
+    } else if (['NOP','RET','nop','ret'].includes(command)) {
         // Special: 
         binaryInstruction += '0'.repeat(27);
     } else {
@@ -82,7 +103,7 @@ function instructionToMachineCode(command, argumentsList, currentAddress, symbol
 }
 
 function parseRegister(register) {
-    if (!register.startsWith('R')) throw new Error(`Invalid register: ${register}`);
+    if (!(register.startsWith('R')||register.startsWith('r'))) throw new Error(`Invalid register: ${register}`);
     const regNum = parseInt(register.slice(1));
     if (isNaN(regNum) || regNum < 0 || regNum > 31) throw new Error(`Invalid register number: ${register}`);
     return regNum.toString(2).padStart(5, '0'); // Convert to 5-bit binary
@@ -144,7 +165,7 @@ export function assemble(script) {
 // Example Script for SimpleRISC
 const script = `
 START:  MOV R1, 5        # Load 5 into R1
-        MOV R2, 7        # Load 7 into R2
+        mov R2, 7        # Load 7 into R2
         ADD R3, R1, R2   # R3 = R1 + R2 (5 + 7 = 12)
         NOP              # End of program
 
